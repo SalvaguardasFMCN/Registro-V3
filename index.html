@@ -1,0 +1,274 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+  <style>
+    body { padding: 20px; }
+    #qr-reader { width: 100%; max-width: 500px; margin-top: 20px; }
+    .nav-tabs .nav-link { cursor: pointer; }
+    #loading { display: none; }
+    /* Estilo para que los menús desplegables se vean bien */
+    select.form-control:invalid { color: #6c757d; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Registro de Asistencia</h2>
+    <hr>
+
+    <div class="event-section p-3 border rounded mb-3 bg-light">
+      <h4>Datos del Evento</h4>
+      <p>Selecciona la actividad a la que asistes.</p>
+      <div class="form-row">
+        
+        <div class="form-group col-md-4">
+          <label for="event-id">ID-Actividad</label>
+          <select class="form-control" id="event-id" required>
+            <option value="" disabled selected>Cargando...</option>
+          </select>
+        </div>
+        
+        <div class="form-group col-md-8">
+          <label for="event-name">Nombre de la actividad</label>
+          <select class="form-control" id="event-name" required>
+            <option value="" disabled selected>Cargando...</option>
+          </select>
+        </div>
+        
+      </div>
+    </div>
+
+    <h4>Datos del Asistente</h4>
+    
+    <ul class="nav nav-tabs" id="myTab" role="tablist">
+      <li class="nav-item"> <a class="nav-link active" id="id-tab" data-toggle="tab" href="#id" role="tab">Por ID</a> </li>
+      <li class="nav-item"> <a class="nav-link" id="name-tab" data-toggle="tab" href="#name" role="tab">Por Nombre</a> </li>
+      <li class="nav-item"> <a class="nav-link" id="qr-tab" data-toggle="tab" href="#qr" role="tab">Por QR</a> </li>
+    </ul>
+    
+    <div class="tab-content" id="myTabContent">
+      <div class="tab-pane fade show active" id="id" role="tabpanel">
+        <form id="form-id" class="mt-3">
+          <div class="form-group"> <label for="id-beneficiario">ID-Beneficiario</label> <input type="text" class="form-control" id="id-beneficiario" required> </div>
+          <button type="submit" class="btn btn-primary">Registrar Asistencia</button>
+        </form>
+      </div>
+      <div class="tab-pane fade" id="name" role="tabpanel">
+        <form id="form-name" class="mt-3">
+          <div class="form-group"> <label for="nombre">Nombre Completo (En MAYÚSCULAS, sin acentos)</label> <input type="text" class="form-control" id="nombre" required> </div>
+          <div class="form-group"> <label for="apellido1">Primer Apellido (En MAYÚSCULAS, sin acentos)</label> <input type="text" class="form-control" id="apellido1" required> </div>
+          <div class="form-group"> <label for="apellido2">Segundo Apellido (En MAYÚSCULAS, sin acentos)</label> <input type="text" class="form-control" id="apellido2"> </div>
+          <button type="submit" class="btn btn-primary">Registrar Asistencia</button>
+        </form>
+      </div>
+      <div class="tab-pane fade" id="qr" role="tabpanel">
+        <p class="mt-3">Apunta la cámara al código QR del asistente.</p>
+        <div id="qr-reader"></div>
+        <button id="stop-qr-btn" class="btn btn-danger mt-2" style="display:none;">Detener Escáner</button>
+      </div>
+    </div>
+    
+    <div id="loading" class="mt-3">
+      <div class="spinner-border" role="status"> <span class="sr-only">Cargando...</span> </div>
+    </div>
+    <div id="results" class="alert mt-3" style="display:none;"></div>
+
+  </div>
+
+  <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.3/dist/umd/popper.min.js"></script>
+  <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+
+  <script>
+    // --- LÓGICA DEL CLIENTE (ACTUALIZADA) ---
+    
+    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbw23HOTb6Q8k6g2zEI7X8VNbBrFc-cYBWCbzDI2SSQP2SPPlMES_oinHqHVro3xLu7npg/exec";
+    let html5QrCode = null;
+
+    // --- Funciones de UI (sin cambios) ---
+    function showLoading(isLoading) { document.getElementById('loading').style.display = isLoading ? 'block' : 'none'; }
+    function showResult(message, isError = false) { const r = document.getElementById('results'); r.textContent = message; r.className = isError ? 'alert alert-danger' : 'alert alert-success'; r.style.display = 'block'; setTimeout(() => { r.style.display = 'none'; }, 5000); }
+    function resetForms() { document.getElementById('form-id').reset(); document.getElementById('form-name').reset(); }
+    
+    // --- Función de API (sin cambios) ---
+    async function callGoogleApi(action, data) {
+      if (WEB_APP_URL === "P_E_G_A_R_TU_URL_AQUÍ") { throw new Error("Error de configuración: Debes pegar la URL de tu Web App."); }
+      const response = await fetch(WEB_APP_URL, {
+        method: 'POST', mode: 'cors', headers: { 'Content-Type': 'text/plain;charset=utf-8', },
+        body: JSON.stringify({ action: action, data: data }),
+      });
+      const result = await response.json();
+      if (result.status === 'error') { throw new Error(result.message); }
+      return result.data;
+    }
+    
+    function handleError(error) { showLoading(false); showResult(`Error: ${error.message}`, true); }
+
+    
+    // =========================================================
+    // NUEVAS FUNCIONES PARA LOS MENÚS DESPLEGABLES
+    // =========================================================
+    
+    /**
+     * Se ejecuta cuando la página termina de cargar.
+     */
+    document.addEventListener('DOMContentLoaded', () => {
+      loadCatalogActivities();
+    });
+
+    /**
+     * Llama a la API para obtener la lista de actividades y rellenar los menús.
+     */
+    async function loadCatalogActivities() {
+      try {
+        const activities = await callGoogleApi('getCatalog', {});
+        populateCatalogDropdowns(activities);
+      } catch (error) {
+        handleError(error);
+        // Si falla la carga, actualiza los menús para mostrar el error
+        const idSelect = document.getElementById('event-id');
+        const nameSelect = document.getElementById('event-name');
+        idSelect.innerHTML = '<option value="" disabled selected>Error al cargar</option>';
+        nameSelect.innerHTML = '<option value="" disabled selected>Error al cargar</option>';
+      }
+    }
+
+    /**
+     * Rellena ambos menús desplegables con la lista de actividades.
+     * @param {Array<object>} activities - El array de [{id, nombre}, ...]
+     */
+    function populateCatalogDropdowns(activities) {
+      const idSelect = document.getElementById('event-id');
+      const nameSelect = document.getElementById('event-name');
+      
+      // Limpia los menús
+      idSelect.innerHTML = '';
+      nameSelect.innerHTML = '';
+      
+      // Añade la opción por defecto "Seleccione..."
+      const defaultOptionId = new Option("Selecciona un ID...", "");
+      defaultOptionId.disabled = true;
+      defaultOptionId.selected = true;
+      idSelect.add(defaultOptionId);
+
+      const defaultOptionName = new Option("Selecciona un Nombre...", "");
+      defaultOptionName.disabled = true;
+      defaultOptionName.selected = true;
+      nameSelect.add(defaultOptionName);
+      
+      // Rellena con los datos del catálogo
+      activities.forEach(activity => {
+        // La clave es que AMBOS menús usen el ID como "valor"
+        // pero muestren textos diferentes.
+        
+        // Opción para el menú de ID (Texto: ID, Valor: ID)
+        const idOption = new Option(activity.id, activity.id);
+        idSelect.add(idOption);
+        
+        // Opción para el menú de Nombre (Texto: Nombre, Valor: ID)
+        const nameOption = new Option(activity.nombre, activity.id);
+        nameSelect.add(nameOption);
+      });
+    }
+    
+    // --- SINCRONIZACIÓN DE MENÚS ---
+    // Si cambias el ID, actualiza el menú de Nombre
+    document.getElementById('event-id').addEventListener('change', (e) => {
+      document.getElementById('event-name').value = e.target.value;
+    });
+    
+    // Si cambias el Nombre, actualiza el menú de ID
+    document.getElementById('event-name').addEventListener('change', (e) => {
+      document.getElementById('event-id').value = e.target.value;
+    });
+
+    // =========================================================
+    // FUNCIÓN DE REGISTRO (ACTUALIZADA)
+    // =========================================================
+
+    /**
+     * Función principal: Valida evento y usuario, luego registra.
+     * @param {object} userIdentifier - Datos del usuario a buscar.
+     * @param {string} method - Nombre del método de registro.
+     */
+    async function processRegistration(userIdentifier, method) {
+      showLoading(true);
+      
+      // 1. Obtener datos del evento (ACTUALIZADO)
+      const eventIdSelect = document.getElementById('event-id');
+      const eventNameSelect = document.getElementById('event-name');
+      
+      const eventId = eventIdSelect.value; // Obtiene el valor (ej: "EVT-001")
+      // Obtiene el texto visible de la opción seleccionada
+      const eventName = eventNameSelect.options[eventNameSelect.selectedIndex].text; 
+      
+      // Valida que se haya seleccionado algo
+      if (!eventId) {
+        handleError(new Error("Por favor, selecciona una actividad del catálogo."));
+        return;
+      }
+      
+      const eventIdentifier = { id: eventId, nombre: eventName };
+      
+      // 2. Construir el payload completo
+      const payload = {
+        userIdentifier: userIdentifier,
+        eventIdentifier: eventIdentifier,
+        method: method
+      };
+      
+      // 3. Llamar a la API
+      try {
+        const successMessage = await callGoogleApi('validateUserAndEvent', payload);
+        showResult(successMessage);
+        resetForms();
+      } catch (error) {
+        handleError(error);
+      } finally {
+        showLoading(false);
+      }
+    }
+
+    // --- Manejadores de Eventos (Sin cambios) ---
+    document.getElementById('form-id').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const id = document.getElementById('id-beneficiario').value;
+      processRegistration({ id: id }, 'ID-Beneficiario');
+    });
+    document.getElementById('form-name').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const nombre = document.getElementById('nombre').value;
+      const apellido1 = document.getElementById('apellido1').value;
+      const apellido2 = document.getElementById('apellido2').value;
+      processRegistration({ nombre: nombre, apellido1: apellido1, apellido2: apellido2 }, 'Nombre');
+    });
+    
+    // --- Lógica del Escáner QR (Sin cambios) ---
+    document.getElementById('qr-tab').addEventListener('click', () => startQrScanner());
+    document.querySelectorAll('#id-tab, #name-tab').forEach(tab => { tab.addEventListener('click', stopQrScanner); });
+    document.getElementById('stop-qr-btn').addEventListener('click', stopQrScanner);
+
+    function startQrScanner() {
+      if (html5QrCode && html5QrCode.isScanning) return;
+      html5QrCode = new Html5Qrcode("qr-reader");
+      document.getElementById('stop-qr-btn').style.display = 'block';
+      const qrCodeSuccessCallback = (decodedText, decodedResult) => {
+        stopQrScanner();
+        processRegistration({ qr: decodedText }, 'QR');
+      };
+      const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+      html5QrCode.start({ facingMode: "environment" }, config, qrCodeSuccessCallback)
+        .catch(err => { showResult("No se pudo iniciar el escáner QR.", true); });
+    }
+    function stopQrScanner() {
+      if (html5QrCode && html5QrCode.isScanning) {
+        html5QrCode.stop().then(ignore => {}).catch(err => {});
+        document.getElementById('stop-qr-btn').style.display = 'none';
+      }
+    }
+  </script>
+</body>
+</html>
