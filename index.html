@@ -2,155 +2,307 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
   <title>Registro de Asistencia</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-
-  <link rel="stylesheet"
-        href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
-
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
   <style>
     body { padding: 20px; }
-    .list-group-item { cursor: pointer; }
+    #qr-reader { width: 100%; max-width: 500px; margin-top: 20px; }
+    .nav-tabs .nav-link { cursor: pointer; }
+    #loading { display: none; }
+    select.form-control:invalid { color: #6c757d; }
   </style>
 </head>
 <body>
+  <div class="container">
+    <h2>Registro de Asistencia</h2>
+    <hr>
 
-<div class="container">
-  <h3>Registro de Asistencia</h3>
-  <hr>
+    <div class="event-section p-3 border rounded mb-3 bg-light">
+      <h4>Datos del Evento</h4>
+      <p>Selecciona la actividad a la que asistes.</p>
+      <div class="form-row">
+        <div class="form-group col-md-4">
+          <label for="event-id">ID-Actividad</label>
+          <select class="form-control" id="event-id" required>
+            <option value="" disabled selected>Cargando...</option>
+          </select>
+        </div>
+        <div class="form-group col-md-8">
+          <label for="event-name">Nombre de la actividad</label>
+          <select class="form-control" id="event-name" required>
+            <option value="" disabled selected>Cargando...</option>
+          </select>
+        </div>
+      </div>
+    </div>
 
-  <!-- EVENTO -->
-  <div class="form-group">
-    <label>ID de la Actividad</label>
-    <input type="text" id="event-id" class="form-control" placeholder="EVT-001">
+    <h4>Datos del Asistente</h4>
+    
+    <ul class="nav nav-tabs" id="myTab" role="tablist">
+      <li class="nav-item"> <a class="nav-link active" id="id-tab" data-toggle="tab" href="#id" role="tab">Por ID</a> </li>
+      <li class="nav-item"> <a class="nav-link" id="name-tab" data-toggle="tab" href="#name" role="tab">Por Nombre</a> </li>
+      <li class="nav-item"> <a class="nav-link" id="qr-tab" data-toggle="tab" href="#qr" role="tab">Por QR</a> </li>
+    </ul>
+    
+    <div class="tab-content" id="myTabContent">
+      <div class="tab-pane fade show active" id="id" role="tabpanel">
+        <form id="form-id" class="mt-3">
+          <div class="form-group"> <label for="id-beneficiario">ID-Beneficiario</label> <input type="text" class="form-control" id="id-beneficiario" required> </div>
+          <button type="submit" class="btn btn-primary">Registrar Asistencia</button>
+        </form>
+      </div>
+      <div class="tab-pane fade" id="name" role="tabpanel">
+        <form id="form-name" class="mt-3">
+          <div class="form-group">
+            <label for="search-person">Buscar Persona (Nombre o Apellido)</label>
+            <input type="text" class="form-control" id="search-person" placeholder="Escribe al menos 3 caracteres..." required>
+            <div id="search-results" class="list-group mt-2" style="display: none;"></div>
+          </div>
+          <button type="submit" class="btn btn-primary" id="register-name-btn" disabled>Registrar Asistencia</button>
+        </form>
+      </div>
+      <div class="tab-pane fade" id="qr" role="tabpanel">
+        <p class="mt-3">Apunta la cámara al código QR del asistente.</p>
+        <div id="qr-reader"></div>
+        <button id="stop-qr-btn" class="btn btn-danger mt-2" style="display:none;">Detener Escáner</button>
+      </div>
+    </div>
+    
+    <div id="loading" class="mt-3">
+      <div class="spinner-border" role="status"> <span class="sr-only">Cargando...</span> </div>
+    </div>
+    <div id="results" class="alert mt-3" style="display:none;"></div>
+
   </div>
 
-  <div class="form-group">
-    <label>Nombre de la Actividad</label>
-    <input type="text" id="event-name" class="form-control" placeholder="Nombre del evento">
-  </div>
+  <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.3/dist/umd/popper.min.js"></script>
+  <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
 
-  <hr>
+  <script>
+    // --- LÓGICA DEL CLIENTE (ACTUALIZADA) ---
+    
+    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwlvZC9CBf9hl09LHlVRvfDSbg6wyOw5cAjBccHOSPsv5xqsIJdpgiSUpLRBRXeW_sybg/exec"
+    let html5QrCode = null;
 
-  <!-- BUSCADOR -->
-  <h5>Búsqueda de Persona</h5>
+    // --- Funciones de UI (sin cambios) ---
+    function showLoading(isLoading) { document.getElementById('loading').style.display = isLoading ? 'block' : 'none'; }
+    function showResult(message, isError = false) { const r = document.getElementById('results'); r.textContent = message; r.className = isError ? 'alert alert-danger' : 'alert alert-success'; r.style.display = 'block'; setTimeout(() => { r.style.display = 'none'; }, 5000); }
+    function resetForms() { document.getElementById('form-id').reset(); document.getElementById('search-person').value = ''; document.getElementById('register-name-btn').disabled = true; hideSearchResults(); }
+    
+    // --- Función de API (sin cambios) ---
+    async function callGoogleApi(action, data) {
+      if (WEB_APP_URL === "P_E_G_A_R_TU_URL_AQUÍ") { throw new Error("Error de configuración: Debes pegar la URL de tu Web App."); }
+      const response = await fetch(WEB_APP_URL, {
+        method: 'POST', mode: 'cors', headers: { 'Content-Type': 'text/plain;charset=utf-8', },
+        body: JSON.stringify({ action: action, data: data }),
+      });
+      const result = await response.json();
+      if (result.status === 'error') { throw new Error(result.message); }
+      return result.data;
+    }
+    
+    function handleError(error) { showLoading(false); showResult(`Error: ${error.message}`, true); }
 
-  <input type="text"
-         id="search-person"
-         class="form-control"
-         placeholder="Buscar por nombre o apellido">
-
-  <div id="person-results" class="list-group mt-3"></div>
-
-  <div id="loading" class="mt-3" style="display:none;">
-    <div class="spinner-border"></div>
-  </div>
-
-  <div id="results" class="alert mt-3" style="display:none;"></div>
-</div>
-
-<script>
-const WEB_APP_URL = "https://script.google.com/macros/s/AKfycby4QbBzIcF7t1P4PbD7JpyeET5HNALR1tHX_dV_2MhcA3aTERl1QHE_iUpxNsQajqkbpQ/exec";
-
-let debounce;
-
-function showLoading(v) {
-  document.getElementById('loading').style.display = v ? 'block' : 'none';
-}
-
-function showResult(msg, error = false) {
-  const r = document.getElementById('results');
-  r.className = error ? 'alert alert-danger' : 'alert alert-success';
-  r.textContent = msg;
-  r.style.display = 'block';
-  setTimeout(() => r.style.display = 'none', 4000);
-}
-
-async function callApi(action, data) {
-  const res = await fetch(WEB_APP_URL, {
-    method: 'POST',
-    mode: 'cors',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ action, data })
-  });
-
-  const json = await res.json();
-  if (json.status === 'error') throw new Error(json.message);
-  return json.data;
-}
-
-/* =====================================
-   BUSCADOR
-===================================== */
-
-document.getElementById('search-person').addEventListener('input', e => {
-  const value = e.target.value.trim();
-  if (value.length < 3) return;
-
-  clearTimeout(debounce);
-  debounce = setTimeout(() => searchPersons(value), 300);
-});
-
-async function searchPersons(query) {
-  showLoading(true);
-  try {
-    const persons = await callApi('searchPersons', { query });
-    renderResults(persons);
-  } catch (e) {
-    showResult(e.message, true);
-  } finally {
-    showLoading(false);
-  }
-}
-
-function renderResults(list) {
-  const container = document.getElementById('person-results');
-  container.innerHTML = '';
-
-  if (list.length === 0) {
-    container.innerHTML = '<div class="text-muted">Sin resultados</div>';
-    return;
-  }
-
-  list.forEach(p => {
-    const item = document.createElement('button');
-    item.className = 'list-group-item list-group-item-action';
-    item.textContent =
-      `${p.nombre} ${p.apellido1} ${p.apellido2 || ''} — ${p.extra || ''}`;
-
-    item.onclick = () => register(p.id);
-    container.appendChild(item);
-  });
-}
-
-/* =====================================
-   REGISTRO
-===================================== */
-
-async function register(personId) {
-  const eventId = document.getElementById('event-id').value;
-  const eventName = document.getElementById('event-name').value;
-
-  if (!eventId || !eventName) {
-    showResult('Debes indicar la actividad', true);
-    return;
-  }
-
-  showLoading(true);
-  try {
-    const msg = await callApi('validateUserAndEvent', {
-      userIdentifier: { id: personId },
-      eventIdentifier: { id: eventId, nombre: eventName },
-      method: 'Busqueda-Nombre'
+    // =========================================================
+    // NUEVAS FUNCIONES PARA LOS MENÚS DESPLEGABLES
+    // =========================================================
+    
+    document.addEventListener('DOMContentLoaded', () => {
+      loadCatalogActivities();
     });
-    showResult(msg);
-  } catch (e) {
-    showResult(e.message, true);
-  } finally {
-    showLoading(false);
-  }
-}
-</script>
 
+    async function loadCatalogActivities() {
+      try {
+        const activities = await callGoogleApi('getCatalog', {});
+        populateCatalogDropdowns(activities);
+      } catch (error) {
+        handleError(error);
+        const idSelect = document.getElementById('event-id');
+        const nameSelect = document.getElementById('event-name');
+        idSelect.innerHTML = '<option value="" disabled selected>Error al cargar</option>';
+        nameSelect.innerHTML = '<option value="" disabled selected>Error al cargar</option>';
+      }
+    }
+
+    function populateCatalogDropdowns(activities) {
+      const idSelect = document.getElementById('event-id');
+      const nameSelect = document.getElementById('event-name');
+      
+      idSelect.innerHTML = '';
+      nameSelect.innerHTML = '';
+      
+      const defaultOptionId = new Option("Selecciona un ID...", "");
+      defaultOptionId.disabled = true;
+      defaultOptionId.selected = true;
+      idSelect.add(defaultOptionId);
+
+      const defaultOptionName = new Option("Selecciona un Nombre...", "");
+      defaultOptionName.disabled = true;
+      defaultOptionName.selected = true;
+      nameSelect.add(defaultOptionName);
+      
+      activities.forEach(activity => {
+        const idOption = new Option(activity.id, activity.id);
+        idSelect.add(idOption);
+        
+        const nameOption = new Option(activity.nombre, activity.id);
+        nameSelect.add(nameOption);
+      });
+    }
+    
+    // --- SINCRONIZACIÓN DE MENÚS ---
+    document.getElementById('event-id').addEventListener('change', (e) => {
+      document.getElementById('event-name').value = e.target.value;
+    });
+    document.getElementById('event-name').addEventListener('change', (e) => {
+      document.getElementById('event-id').value = e.target.value;
+    });
+
+    // =========================================================
+    // LÓGICA DE BÚSQUEDA PARA "POR NOMBRE"
+    // =========================================================
+    
+    let selectedPersonId = null;
+    let searchTimeout = null;
+
+    document.getElementById('search-person').addEventListener('input', function() {
+      const query = this.value.trim();
+      clearTimeout(searchTimeout);
+      if (query.length >= 3) {
+        searchTimeout = setTimeout(() => performSearch(query), 300);
+      } else {
+        hideSearchResults();
+      }
+    });
+
+    async function performSearch(query) {
+      try {
+        const results = await callGoogleApi('searchPersons', { query: query });
+        displaySearchResults(results);
+      } catch (error) {
+        console.error('Error en búsqueda:', error);
+        hideSearchResults();
+      }
+    }
+
+    function displaySearchResults(results) {
+      const resultsDiv = document.getElementById('search-results');
+      resultsDiv.innerHTML = '';
+      if (results.length > 0) {
+        results.forEach(person => {
+          const item = document.createElement('a');
+          item.className = 'list-group-item list-group-item-action';
+          item.textContent = `${person.nombre} ${person.apellido1} ${person.apellido2 || ''} (ID: ${person.id})`;
+          item.href = '#';
+          item.addEventListener('click', () => selectPerson(person));
+          resultsDiv.appendChild(item);
+        });
+        resultsDiv.style.display = 'block';
+      } else {
+        resultsDiv.innerHTML = '<div class="list-group-item">No se encontraron resultados.</div>';
+        resultsDiv.style.display = 'block';
+      }
+    }
+
+    function selectPerson(person) {
+      selectedPersonId = person.id;
+      document.getElementById('search-person').value = `${person.nombre} ${person.apellido1} ${person.apellido2 || ''}`;
+      document.getElementById('register-name-btn').disabled = false;
+      hideSearchResults();
+    }
+
+    function hideSearchResults() {
+      document.getElementById('search-results').style.display = 'none';
+    }
+
+    // --- Limpiar búsqueda al cambiar pestaña ---
+    document.querySelectorAll('#id-tab, #qr-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        selectedPersonId = null;
+        document.getElementById('search-person').value = '';
+        document.getElementById('register-name-btn').disabled = true;
+        hideSearchResults();
+      });
+    });
+
+    // =========================================================
+    // FUNCIÓN DE REGISTRO (ACTUALIZADA)
+    // =========================================================
+
+    async function processRegistration(userIdentifier, method) {
+      showLoading(true);
+      
+      const eventIdSelect = document.getElementById('event-id');
+      const eventNameSelect = document.getElementById('event-name');
+      
+      const eventId = eventIdSelect.value;
+      const eventName = eventNameSelect.options[eventNameSelect.selectedIndex].text;
+      
+      if (!eventId) {
+        handleError(new Error("Por favor, selecciona una actividad del catálogo."));
+        return;
+      }
+      
+      const eventIdentifier = { id: eventId, nombre: eventName };
+      
+      const payload = {
+        userIdentifier: userIdentifier,
+        eventIdentifier: eventIdentifier,
+        method: method
+      };
+      
+      try {
+        const successMessage = await callGoogleApi('validateUserAndEvent', payload);
+        showResult(successMessage);
+        resetForms();
+      } catch (error) {
+        handleError(error);
+      } finally {
+        showLoading(false);
+      }
+    }
+
+    // --- Manejadores de Eventos (Actualizados) ---
+    document.getElementById('form-id').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const id = document.getElementById('id-beneficiario').value;
+      processRegistration({ id: id }, 'ID-Beneficiario');
+    });
+    document.getElementById('form-name').addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (!selectedPersonId) {
+        showResult("Selecciona una persona de la lista de búsqueda.", true);
+        return;
+      }
+      processRegistration({ id: selectedPersonId }, 'Busqueda-Nombre');
+    });
+    
+    // --- Lógica del Escáner QR (Sin cambios) ---
+    document.getElementById('qr-tab').addEventListener('click', () => startQrScanner());
+    document.querySelectorAll('#id-tab, #name-tab').forEach(tab => { tab.addEventListener('click', stopQrScanner); });
+    document.getElementById('stop-qr-btn').addEventListener('click', stopQrScanner);
+
+    function startQrScanner() {
+      if (html5QrCode && html5QrCode.isScanning) return;
+      html5QrCode = new Html5Qrcode("qr-reader");
+      document.getElementById('stop-qr-btn').style.display = 'block';
+      const qrCodeSuccessCallback = (decodedText, decodedResult) => {
+        stopQrScanner();
+        processRegistration({ qr: decodedText }, 'QR');
+      };
+      const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+      html5QrCode.start({ facingMode: "environment" }, config, qrCodeSuccessCallback)
+        .catch(err => { showResult("No se pudo iniciar el escáner QR.", true); });
+    }
+    function stopQrScanner() {
+      if (html5QrCode && html5QrCode.isScanning) {
+        html5QrCode.stop().then(ignore => {}).catch(err => {});
+        document.getElementById('stop-qr-btn').style.display = 'none';
+      }
+    }
+  </script>
 </body>
 </html>
