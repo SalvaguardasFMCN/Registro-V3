@@ -1,0 +1,212 @@
+// --- CONFIGURACIÓN DE HOJAS Y COLUMNAS ---
+
+const NOMBRE_HOJA_BD = "Respuestas de formulario 1"; 
+const NOMBRE_HOJA_EVENTOS = "Respuestas de formulario 2";
+const NOMBRE_HOJA_LOG = "Registro de asistencia";
+
+// MAPA DE COLUMNAS (Actualizado con Teléfono)
+const COL_BD = {
+  NOMBRE: 12,    // Columna L
+  APELLIDO1: 13, // Columna M
+  APELLIDO2: 14, // Columna N
+  TELEFONO: 21,  // Columna U (Nuevo campo)
+  QR: 22,        // Columna W
+  ID: 23         // Columna X
+};
+
+const COL_EVENTO = {
+  NOMBRE: 6,
+  ID: 9
+};
+
+const COL_LOG = {
+  TIMESTAMP: 1, ID: 2, NOMBRE: 3, APELLIDO1: 4, APELLIDO2: 5,
+  ID_EVENTO: 6, NOMBRE_EVENTO: 7, METODO: 8
+};
+// --- FIN CONFIGURACIÓN ---
+
+
+function doPost(e) {
+  let response = {};
+  try {
+    const payload = JSON.parse(e.postData.contents || "{}");
+    const action = payload.action;
+    const data = payload.data || {};
+
+    switch(action) {
+      case 'getCatalog':
+        response = { status: 'success', data: getCatalogActivities() };
+        break;
+
+      case 'searchUser':
+        response = { status: 'success', data: searchUsersByName(data.query) };
+        break;
+
+      case 'validateUserAndEvent':
+        const eventInfo = validateEvent(data.eventIdentifier);
+        if (!eventInfo) throw new Error("Actividad no encontrada.");
+
+        const userInfo = findUser(data.userIdentifier);
+        if (!userInfo) throw new Error("Usuario no encontrado (Verifica ID, Teléfono o Nombre).");
+
+        const logData = { user: userInfo, event: eventInfo, method: data.method };
+        const successMessage = logAttendance(logData);
+        response = { status: 'success', data: successMessage };
+        break;
+
+      default:
+        throw new Error("Acción no válida.");
+    }
+  } catch(error) {
+    response = { status: 'error', message: error.message };
+  }
+  return ContentService.createTextOutput(JSON.stringify(response)).setMimeType(ContentService.MimeType.JSON);
+}
+
+
+/* ===========================
+   findUser (ACTUALIZADO CON TELÉFONO)
+   =========================== */
+function findUser(identifier) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(NOMBRE_HOJA_BD);
+  if (!sheet) return null;
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return null;
+
+  // Leemos hasta la columna ID (24)
+  const data = sheet.getRange(2, 1, lastRow - 1, COL_BD.ID).getValues();
+
+  for (let i = 0; i < data.length; i++) {
+    const row = data[i];
+    let found = false;
+
+    // Valores de la base de datos
+    const dbId = String(row[COL_BD.ID - 1] || "").trim();
+    const dbQr = String(row[COL_BD.QR - 1] || "").trim();
+    // Limpiamos el teléfono de la BD (quitamos espacios y guiones) para comparar solo números
+    const dbTel = String(row[COL_BD.TELEFONO - 1] || "").replace(/\D/g, ''); 
+
+    if (identifier.id) {
+      found = dbId === identifier.id.toString().trim();
+
+    } else if (identifier.telefono) {
+      // NUEVA LÓGICA: Búsqueda por teléfono
+      // Limpiamos lo que escribió el usuario para comparar solo números
+      const searchTel = identifier.telefono.toString().replace(/\D/g, '');
+      // Verificamos que no esté vacío y coincida
+      found = (searchTel.length > 0) && (dbTel === searchTel);
+
+    } else if (identifier.qr) {
+      const scannedText = identifier.qr.toString().trim();
+      found = (dbQr === scannedText) || (dbId === scannedText);
+
+    } else if (identifier.nombre) {
+      const dbNombre = String(row[COL_BD.NOMBRE - 1] || "").trim().toLowerCase();
+      const dbAp1 = String(row[COL_BD.APELLIDO1 - 1] || "").trim().toLowerCase();
+      const dbAp2 = String(row[COL_BD.APELLIDO2 - 1] || "").trim().toLowerCase();
+      const searchNombre = identifier.nombre.trim().toLowerCase();
+      const searchAp1 = identifier.apellido1.trim().toLowerCase();
+      const searchAp2 = (identifier.apellido2 || "").trim().toLowerCase();
+      found = dbNombre === searchNombre && dbAp1 === searchAp1 && dbAp2 === searchAp2;
+    }
+
+    if (found) {
+      return {
+        id: dbId,
+        nombre: row[COL_BD.NOMBRE - 1],
+        apellido1: row[COL_BD.APELLIDO1 - 1],
+        apellido2: row[COL_BD.APELLIDO2 - 1]
+      };
+    }
+  }
+  return null;
+}
+
+
+/* ===========================
+   searchUsersByName (Actualizado para mostrar teléfono en la lista si quieres)
+   =========================== */
+function searchUsersByName(query) {
+  if (!query || query.length < 2) return [];
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(NOMBRE_HOJA_BD);
+  if (!sheet) return [];
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+  const data = sheet.getRange(2, 1, lastRow - 1, COL_BD.ID).getValues();
+  const searchStr = query.toLowerCase().trim();
+  const results = [];
+
+  for (let i = 0; i < data.length; i++) {
+    const row = data[i];
+    const nombre = String(row[COL_BD.NOMBRE - 1] || "").toLowerCase();
+    const ap1 = String(row[COL_BD.APELLIDO1 - 1] || "").toLowerCase();
+    const ap2 = String(row[COL_BD.APELLIDO2 - 1] || "").toLowerCase();
+    const id = String(row[COL_BD.ID - 1] || "");
+    const fullName = `${nombre} ${ap1} ${ap2}`;
+
+    if (fullName.includes(searchStr) || id.toLowerCase().includes(searchStr)) {
+      results.push({
+        id: row[COL_BD.ID - 1], 
+        nombreCompleto: `${row[COL_BD.NOMBRE - 1]} ${row[COL_BD.APELLIDO1 - 1]} ${row[COL_BD.APELLIDO2 - 1]}`.trim()
+      });
+    }
+    if (results.length >= 10) break;
+  }
+  return results;
+}
+
+// (Las demás funciones: getCatalogActivities, validateEvent, logAttendance siguen igual)
+function getCatalogActivities() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(NOMBRE_HOJA_EVENTOS);
+  if (!sheet) return [];
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+  const data = sheet.getRange(2, 1, lastRow - 1, COL_EVENTO.ID).getValues();
+  const activities = [];
+  for (let i = 0; i < data.length; i++) {
+    const row = data[i];
+    const id = row[COL_EVENTO.ID - 1];
+    const nombre = row[COL_EVENTO.NOMBRE - 1];
+    if (id && nombre) activities.push({ id: id.toString().trim(), nombre: nombre.toString().trim() });
+  }
+  activities.sort((a, b) => a.nombre.localeCompare(b.nombre));
+  return activities;
+}
+
+function validateEvent(eventIdentifier) {
+  if (!eventIdentifier || !eventIdentifier.id) return null;
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(NOMBRE_HOJA_EVENTOS);
+  if (!sheet) return null;
+  const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, COL_EVENTO.ID).getValues();
+  const sId = eventIdentifier.id.toString().trim();
+  const sName = eventIdentifier.nombre.toString().trim().toLowerCase();
+  for (let i = 0; i < data.length; i++) {
+    const row = data[i];
+    if (row[COL_EVENTO.ID - 1].toString().trim() === sId && row[COL_EVENTO.NOMBRE - 1].toString().trim().toLowerCase() === sName) {
+      return { id: sId, nombre: row[COL_EVENTO.NOMBRE - 1] };
+    }
+  }
+  return null;
+}
+
+function logAttendance(logData) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(NOMBRE_HOJA_LOG);
+  if (!sheet) throw new Error(`No se encuentra la hoja '${NOMBRE_HOJA_LOG}'`);
+  const newRow = new Array(sheet.getMaxColumns()).fill("");
+  newRow[COL_LOG.TIMESTAMP - 1] = new Date();
+  newRow[COL_LOG.ID - 1] = logData.user.id;
+  newRow[COL_LOG.NOMBRE - 1] = logData.user.nombre;
+  newRow[COL_LOG.APELLIDO1 - 1] = logData.user.apellido1;
+  newRow[COL_LOG.APELLIDO2 - 1] = logData.user.apellido2;
+  newRow[COL_LOG.ID_EVENTO - 1] = logData.event.id;
+  newRow[COL_LOG.NOMBRE_EVENTO - 1] = logData.event.nombre;
+  newRow[COL_LOG.METODO - 1] = logData.method;
+  sheet.appendRow(newRow);
+  return `Asistencia registrada: ${logData.user.nombre} ${logData.user.apellido1}`;
+}
