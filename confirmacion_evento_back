@@ -1,0 +1,38 @@
+function enviarConfirmacionEvento(e) {
+  // 1. Identificar la hoja y la fila activa
+  var hoja = e.source.getSheetByName("Respuestas de formulario 2");
+  var rango = e.range;
+  var filaIndex = rango.getRow();
+
+  // 2. Obtener el correo electrónico del responsable
+  // IMPORTANTE: Ajusta el número '3' a la columna donde está el correo en tu hoja (A=1, B=2, C=3, etc.)
+  var columnaEmail = 7; 
+  var emailDestino = hoja.getRange(filaIndex, columnaEmail).getValue();
+
+  // 3. Obtener el ID_Actividad generado por la fórmula
+  // IMPORTANTE: Ajusta el número '26' a la columna donde pusiste la fórmula del ID (Z=26)
+  var columnaID = 9; 
+  var idActividad = hoja.getRange(filaIndex, columnaID).getValue();
+  
+  // 4. Obtener el nombre del evento (opcional, para personalizar)
+  // Asumimos que el nombre del evento está en la columna B (2)
+  var nombreEvento = hoja.getRange(filaIndex, 6).getValue();
+
+  // 4. Obtener el nombre de la persona que registra la actividad (opcional, para personalizar)
+  // Asumimos que el nombre de la persona está en la columna H (8)
+  var personaregistra = hoja.getRange(filaIndex, 8).getValue();
+
+
+  // 5. Configurar el asunto y mensaje del correo
+  var asunto = "Confirmación de Registro de Evento: " + idActividad;
+  var mensaje = "Hola, " + personaregistra + " . \n" +
+                "Se ha registrado exitosamente el evento: " + nombreEvento + ".\n" +
+                "La clave única asignada para este evento es: " + idActividad + "\n\n" +
+                "Por favor conserva esta clave para futuros reportes.\n\n" +
+                "Saludos,\nEquipo del Fondo Mexicano para la Conservación de la Naturaleza.";
+
+  // 6. Enviar el correo
+  if (emailDestino) {
+    MailApp.sendEmail(emailDestino, asunto, mensaje);
+  }
+}
