@@ -6,13 +6,46 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
   <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
   <style>
-    body { padding: 20px; padding-bottom: 50px; }
+    body { padding: 20px; padding-bottom: 50px; background-color: #fcfcfc; }
+    
+    /* --- ESTILOS PERSONALIZADOS --- */
+    
+    /* Imagen de cabecera: Ajusta el max-height si la quieres más grande o chica */
+    .header-logo {
+      max-height: 120px; 
+      width: auto;
+      margin-bottom: 15px;
+    }
+
+    /* Fondo personalizado para la sección del evento */
+    .custom-event-bg {
+      background-color: rgba(36, 124, 125, 0.5) !important;
+      border: 1px solid #247c7d;
+      color: #000;
+    }
+
+    /* Botones personalizados: Oliva/Dorado */
+    .btn-primary {
+      background-color: #a7a337 !important;
+      border-color: #a7a337 !important;
+    }
+    .btn-primary:hover, .btn-primary:active, .btn-primary:focus {
+      background-color: #8f8b2b !important;
+      border-color: #8f8b2b !important;
+    }
+
+    /* Títulos y textos */
+    h2, h5 { color: #247c7d; }
+
+    /* Estilos base */
     #qr-reader { width: 100%; max-width: 500px; margin-top: 20px; }
-    .nav-tabs .nav-link { cursor: pointer; }
+    .nav-tabs .nav-link { cursor: pointer; color: #247c7d; }
+    .nav-tabs .nav-link.active { color: #495057; font-weight: bold; }
+    
     #loading { display: none; }
     select.form-control:invalid { color: #6c757d; }
     
-    /* Estilos para la lista flotante */
+    /* Lista flotante del buscador */
     #search-results-list {
       position: absolute;
       top: 100%; left: 0; right: 0; z-index: 1000;
@@ -22,17 +55,23 @@
     }
     .search-item { padding: 10px; cursor: pointer; border-bottom: 1px solid #eee; }
     .search-item:hover { background-color: #f8f9fa; }
-    
-    /* Estilo especial para cuando no hay resultados en búsqueda */
     .no-result-item { padding: 15px; text-align: center; cursor: default; }
     .no-result-item:hover { background-color: white; }
   </style>
 </head>
 <body>
   <div class="container">
-    <h2 class="text-center mb-4">Registro de Asistencia</h2>
     
-    <div class="event-section p-3 border rounded mb-4 bg-light">
+<div class="text-center">
+      <img src="https://lh3.googleusercontent.com/d/1sua78UWnIkPZSZTbLtjQkvIzEr7nrxm7" 
+           alt="Logotipo" 
+           class="img-fluid header-logo"
+           referrerpolicy="no-referrer">
+    </div>
+
+    <h2 class="text-center mb-4">Registro de Asistencia del proyecto ACCIÓN</h2>
+    
+    <div class="event-section p-3 rounded mb-4 custom-event-bg">
       <h5 class="mb-3">1. Datos del Evento</h5>
       <div class="form-row">
         <div class="form-group col-md-4">
@@ -57,7 +96,7 @@
     <ul class="nav nav-tabs" id="myTab" role="tablist">
       <li class="nav-item"> <a class="nav-link active" id="id-tab" data-toggle="tab" href="#id" role="tab">Por ID</a> </li>
       <li class="nav-item"> <a class="nav-link" id="phone-tab" data-toggle="tab" href="#phone" role="tab">Por Teléfono</a> </li>
-      <li class="nav-item"> <a class="nav-link" id="name-tab" data-toggle="tab" href="#name" role="tab">Manual</a> </li>
+      <li class="nav-item"> <a class="nav-link" id="name-tab" data-toggle="tab" href="#name" role="tab">Por Nombre</a> </li>
       <li class="nav-item"> <a class="nav-link" id="qr-tab" data-toggle="tab" href="#qr" role="tab">Por QR</a> </li>
     </ul>
     
@@ -73,7 +112,7 @@
       <div class="tab-pane fade" id="phone" role="tabpanel">
         <form id="form-phone" class="mt-3">
           <div class="form-group"> 
-            <label>Número de Teléfono</label> 
+            <label>Número de Teléfono (10 dígitos, sin espacios)</label> 
             <input type="tel" class="form-control" id="telefono-input" placeholder="Ej: 5512345678" required> 
           </div>
           <button type="submit" class="btn btn-primary btn-block">Registrar por Teléfono</button>
@@ -97,7 +136,7 @@
     </div>
     
     <div id="loading" class="mt-3 text-center">
-      <div class="spinner-border text-primary" role="status"> <span class="sr-only">Cargando...</span> </div>
+      <div class="spinner-border" role="status" style="color: #a7a337;"> <span class="sr-only">Cargando...</span> </div>
       <p>Procesando...</p>
     </div>
     <div id="results" class="alert mt-3" style="display:none;"></div>
@@ -113,18 +152,15 @@
     const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwMIY4QN0VrUeMHM0HjpD041FLq-CqbfELmMSkt2w_EhTFe9O0WRau01VJiMeI26iWtRQ/exec"; 
     // -------------------------------------
 
-    // URL DEL FORMULARIO DE REGISTRO
     const FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSe6YYYIIgq-5XTdOUmEq1oM8V2NdgzPWuR9x5VIG0nYLupZ4g/viewform?usp=dialog";
-
     let html5QrCode = null;
     let searchTimeout = null;
 
     document.addEventListener('DOMContentLoaded', () => { loadCatalogActivities(); });
 
-    // --- 1. LÓGICA DEL BUSCADOR (Modificada) ---
+    // BUSCADOR
     const searchInput = document.getElementById('user-search');
     const resultsList = document.getElementById('search-results-list');
-
     searchInput.addEventListener('input', (e) => {
       const query = e.target.value;
       clearTimeout(searchTimeout);
@@ -143,21 +179,17 @@
 
     function renderSearchResults(users) {
       resultsList.innerHTML = '';
-      
-      // SI NO HAY RESULTADOS -> MOSTRAR BOTÓN DE REGISTRO
       if (users.length === 0) { 
         resultsList.innerHTML = `
           <div class="no-result-item">
              <p class="mb-2 text-danger font-weight-bold">Usuario no encontrado</p>
              <p class="small text-muted mb-2">¿No aparece en la lista?</p>
-             <a href="${FORM_URL}" target="_blank" class="btn btn-success btn-sm btn-block">
+             <a href="${FORM_URL}" target="_blank" class="btn btn-primary btn-sm btn-block">
                Registrarse aquí
              </a>
           </div>`; 
         return; 
       }
-
-      // Si hay resultados, mostrarlos
       users.forEach(user => {
         const item = document.createElement('div');
         item.className = 'search-item';
@@ -172,14 +204,11 @@
       $('#id-tab').tab('show');
       searchInput.value = ''; resultsList.style.display = 'none';
     }
-    
-    // Cerrar buscador si clic fuera (pero permitir clic en el enlace)
     document.addEventListener('click', (e) => {
       if (!searchInput.contains(e.target) && !resultsList.contains(e.target)) resultsList.style.display = 'none';
     });
 
-
-    // --- 2. GESTIÓN DE CATÁLOGO ---
+    // CATALOGO
     async function loadCatalogActivities() {
       try {
         const activities = await callGoogleApi('getCatalog', {});
@@ -201,14 +230,12 @@
     document.getElementById('event-id').addEventListener('change', (e) => document.getElementById('event-name').value = e.target.value);
     document.getElementById('event-name').addEventListener('change', (e) => document.getElementById('event-id').value = e.target.value);
 
-
-    // --- 3. REGISTRO Y MANEJO DE ERRORES ---
+    // REGISTRO
     async function processRegistration(userIdentifier, method) {
       showLoading(true);
       const eventIdSelect = document.getElementById('event-id');
       const eventNameSelect = document.getElementById('event-name');
       if (!eventIdSelect.value) { handleError(new Error("Selecciona una actividad.")); return; }
-      
       const eventName = eventNameSelect.options[eventNameSelect.selectedIndex].text;
       const eventIdentifier = { id: eventIdSelect.value, nombre: eventName };
       
@@ -216,25 +243,17 @@
         const successMessage = await callGoogleApi('validateUserAndEvent', { userIdentifier, eventIdentifier, method });
         showResult(successMessage);
         resetForms();
-      } catch (error) { 
-        handleError(error); // Aquí se captura el error de "Usuario no encontrado"
-      } finally { 
-        showLoading(false); 
-      }
+      } catch (error) { handleError(error); } finally { showLoading(false); }
     }
 
-    // --- FORMULARIOS ---
     document.getElementById('form-id').addEventListener('submit', (e) => {
       e.preventDefault();
       processRegistration({ id: document.getElementById('id-beneficiario').value }, 'ID-Beneficiario');
     });
-
     document.getElementById('form-phone').addEventListener('submit', (e) => {
       e.preventDefault();
-      const tel = document.getElementById('telefono-input').value;
-      processRegistration({ telefono: tel }, 'Teléfono');
+      processRegistration({ telefono: document.getElementById('telefono-input').value }, 'Teléfono');
     });
-
     document.getElementById('form-name').addEventListener('submit', (e) => {
       e.preventDefault();
       processRegistration({ 
@@ -244,8 +263,7 @@
       }, 'Nombre Manual');
     });
 
-
-    // --- QR ---
+    // QR
     document.getElementById('qr-tab').addEventListener('click', () => startQrScanner());
     document.querySelectorAll('#id-tab, #name-tab, #phone-tab').forEach(tab => tab.addEventListener('click', stopQrScanner));
     document.getElementById('stop-qr-btn').addEventListener('click', stopQrScanner);
@@ -264,42 +282,30 @@
       }
     }
 
-
-    // --- 4. UTILS Y MANEJO VISUAL ---
+    // UTILS
     function showLoading(b) { document.getElementById('loading').style.display = b ? 'block' : 'none'; }
-    
     function showResult(message, isError = false) { 
       const r = document.getElementById('results'); 
-      // Usamos innerHTML para permitir enlaces/botones
       r.innerHTML = message; 
       r.className = isError ? 'alert alert-danger' : 'alert alert-success'; 
       r.style.display = 'block'; 
-      // Si es error, dar más tiempo para leer y clickear (15 seg)
       setTimeout(() => r.style.display = 'none', isError ? 15000 : 5000); 
     }
-    
     function resetForms() { 
       document.getElementById('form-id').reset(); 
       document.getElementById('form-name').reset();
       document.getElementById('form-phone').reset();
     }
-    
-    /**
-     * Función especial para manejar errores y mostrar el botón si es necesario
-     */
     function handleError(e) { 
       showLoading(false); 
-      
-      // Si el error dice "Usuario no encontrado" (viene del Backend)
       if (e.message && e.message.includes("Usuario no encontrado")) {
         const htmlMessage = `
           <strong>Usuario no encontrado.</strong><br>
           Por favor regístrate en el siguiente formulario:<br>
-          <a href="${FORM_URL}" target="_blank" class="btn btn-success mt-2">Ir al Registro</a>
+          <a href="${FORM_URL}" target="_blank" class="btn btn-primary mt-2">Ir al Registro</a>
         `;
         showResult(htmlMessage, true);
       } else {
-        // Otros errores (conexión, evento no válido, etc.)
         showResult(`Error: ${e.message}`, true); 
       }
     }
